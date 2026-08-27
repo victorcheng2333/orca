@@ -4,6 +4,7 @@ import type { AgentsStepId } from '../../../../shared/agents-orchestration-steps
 import type { WorkbenchStepId } from '../../../../shared/workbench-steps'
 import type { ReviewStepId } from '../../../../shared/review-steps'
 import type { FeatureWallTourDepthSummary } from '../../../../shared/feature-wall-tour-depth'
+import { CLAUDE_MANAGED_ACCOUNTS_ENABLED } from '../../../../shared/claude-managed-account-policy'
 import {
   getCommitMessageAgentCapability,
   isCustomAgentId,
@@ -90,7 +91,9 @@ export function useFeatureWallCompletion(
 
   const readUsageAccountState = useCallback(async (): Promise<boolean> => {
     const [claude, codex] = await Promise.all([
-      window.api.claudeAccounts.list().catch(() => null),
+      CLAUDE_MANAGED_ACCOUNTS_ENABLED
+        ? window.api.claudeAccounts.list().catch(() => null)
+        : Promise.resolve(null),
       window.api.codexAccounts.list().catch(() => null)
     ])
     return hasFeatureWallUsageTracking({

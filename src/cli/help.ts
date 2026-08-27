@@ -19,8 +19,8 @@ Agent Discovery:
   agent-context             Print the machine-readable command schema for agents
 
 Accounts:
-  account add               Add a managed Claude or Codex account on this Orca host
-  account list              List managed Claude and Codex accounts on this Orca host
+  account add               Add a managed Codex account on this Orca host
+  account list              List managed provider accounts on this Orca host
 
 Skills:
   skills installed          List installed skill selectors
@@ -226,7 +226,7 @@ Common Commands:
   orca status [--json]
   orca diagnostics memory [--json]
   orca agent-context [--json]
-  orca account add [--agent claude|codex] [--json]
+  orca account add [--agent codex] [--json]
   orca account list [--json]
   orca host list [--json]
   orca environment add --name <name> --pairing-code <code> [--json]

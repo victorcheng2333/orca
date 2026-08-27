@@ -11,6 +11,7 @@ import {
 } from './managed-auth-path'
 import {
   deleteManagedClaudeKeychainCredentials,
+  deleteManagedClaudeKeychainCredentialsStrict,
   readManagedClaudeKeychainCredentials,
   writeManagedClaudeKeychainCredentials
 } from './keychain'
@@ -148,6 +149,19 @@ export class ClaudeManagedAuthStorage {
     await deleteManagedClaudeKeychainCredentials(accountId)
   }
 
+  async removeStrict(accountId: string, candidatePath: string): Promise<void> {
+    await deleteManagedClaudeKeychainCredentialsStrict(accountId)
+    try {
+      const managedAuthPath = await this.assertOwned(candidatePath, accountId)
+      rmSync(resolve(managedAuthPath, '..'), { recursive: true, force: true })
+    } catch (error) {
+      if (await this.isMissingOwnedLocation(accountId, candidatePath)) {
+        return
+      }
+      throw error
+    }
+  }
+
   async assertOwned(candidatePath: string, expectedAccountId?: string): Promise<string> {
     const wslInfo = parseWslUncPath(candidatePath)
     if (wslInfo) {
@@ -271,6 +285,27 @@ export class ClaudeManagedAuthStorage {
     const root = getClaudeManagedAccountsRoot()
     mkdirSync(root, { recursive: true, mode: 0o700 })
     return root
+  }
+
+  private async isMissingOwnedLocation(accountId: string, candidatePath: string): Promise<boolean> {
+    const wslInfo = parseWslUncPath(candidatePath)
+    if (!wslInfo) {
+      const expectedPath = join(this.getRoot(), accountId, 'auth')
+      return resolve(candidatePath) === resolve(expectedPath) && !existsSync(candidatePath)
+    }
+    const expectedSuffix = `/.local/share/orca/claude-accounts/${accountId}/auth`
+    if (!wslInfo.linuxPath.endsWith(expectedSuffix)) {
+      return false
+    }
+    const result = await runWslProcess({
+      distro: wslInfo.distro,
+      loginPath: 'none',
+      shell: 'bash',
+      script: 'test ! -e "$1"',
+      args: [wslInfo.linuxPath],
+      timeoutMs: 5000
+    })
+    return result.code === 0 && !result.timedOut
   }
 
   private readAccountId(candidatePath: string): string | null {

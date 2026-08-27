@@ -30,42 +30,14 @@ import type {
   CodexRateLimitAccountsState
 } from '../../shared/managed-account-types'
 import {
+  CLAUDE_MANAGED_ACCOUNTS_DISABLED_MESSAGE,
+  CLAUDE_MANAGED_ACCOUNTS_ENABLED
+} from '../../shared/claude-managed-account-policy'
+import {
   type InteractiveLoginSession,
   withInteractiveLoginCleanup
 } from './interactive-login-interruption'
-
-// Why: add returns just that provider's state; list returns the full snapshot.
-type AccountsListSnapshot = {
-  claude: ClaudeRateLimitAccountsState
-  codex: CodexRateLimitAccountsState
-}
-
-// Why: Claude and Codex managed-account summaries both carry id+email+active id,
-// so one formatter renders either provider's block.
-type AccountsBlock = {
-  accounts: readonly { id: string; email: string }[]
-  activeAccountId: string | null
-  activeAccountIdsByRuntime?: {
-    host: string | null
-    wsl: Record<string, string | null>
-  }
-}
-
-/** Renders a provider's managed-account list as a human-readable block, marking the active account. */
-function formatAccountsBlock(label: string, block: AccountsBlock): string {
-  if (block.accounts.length === 0) {
-    return `No managed ${label} accounts.`
-  }
-  const activeAccountIds = new Set([
-    block.activeAccountId,
-    block.activeAccountIdsByRuntime?.host,
-    ...Object.values(block.activeAccountIdsByRuntime?.wsl ?? {})
-  ])
-  const lines = block.accounts.map(
-    (account) => `  ${account.email}${activeAccountIds.has(account.id) ? ' (active)' : ''}`
-  )
-  return `Managed ${label} accounts (${block.accounts.length}):\n${lines.join('\n')}`
-}
+import { formatAccountsBlock, type AccountsListSnapshot } from './account-list-format'
 
 function addAgentNodePaths(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const pathKey =
@@ -297,7 +269,7 @@ async function assertAccountImportSupported({ client }: HandlerContext): Promise
   }
 }
 
-/** CLI handlers for `orca account add [--agent claude|codex]` and `orca account list`. */
+/** CLI handlers for `orca account add [--agent codex]` and `orca account list`. */
 export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
   'account add': async (ctx) => {
     const agentFlag = ctx.flags.get('agent')
@@ -306,15 +278,18 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
     if (agentFlag !== undefined && typeof agentFlag !== 'string') {
       throw new RuntimeClientError(
         'invalid_argument',
-        'Missing a value for --agent. Use `--agent claude` or `--agent codex`.'
+        'Missing a value for --agent. Use `--agent codex`.'
       )
     }
-    const agent = agentFlag ?? 'claude'
+    const agent = agentFlag ?? 'codex'
     if (agent !== 'claude' && agent !== 'codex') {
       throw new RuntimeClientError(
         'invalid_argument',
         `Unsupported --agent "${agent}". Use "claude" or "codex".`
       )
+    }
+    if (agent === 'claude' && !CLAUDE_MANAGED_ACCOUNTS_ENABLED) {
+      throw new RuntimeClientError('invalid_argument', CLAUDE_MANAGED_ACCOUNTS_DISABLED_MESSAGE)
     }
     rejectRemoteSelectionFlags(ctx, 'orca account add')
     // Why: fail on runtime version skew before burning a full OAuth round trip.

@@ -43,6 +43,7 @@ import type {
   ClaudeRateLimitAccountsState,
   CodexRateLimitAccountsState
 } from '../../../../shared/managed-account-types'
+import { CLAUDE_MANAGED_ACCOUNTS_ENABLED } from '../../../../shared/claude-managed-account-policy'
 import type {
   ProviderRateLimits,
   RateLimitRuntimeTarget,
@@ -853,8 +854,8 @@ export function ClaudeSwitcherMenu({
       asSubmenu={asSubmenu}
       triggerContent={triggerContent}
       ariaLabel={translate(
-        'auto.components.status.bar.StatusBar.3dd7ddfae1',
-        'Open Claude details and account switcher'
+        'auto.components.status.bar.StatusBar.openClaudeUsageDetails',
+        'Open Claude usage details'
       )}
       topContent={
         <AccountRuntimeToggle
@@ -870,95 +871,120 @@ export function ClaudeSwitcherMenu({
       open={open}
       onOpenChange={handleOpenChange}
     >
-      <DropdownMenuLabel>
-        {translate('auto.components.status.bar.StatusBar.d450654fa2', 'Claude Account')}
-      </DropdownMenuLabel>
-      <DropdownMenuItem
-        onSelect={(event) => {
-          event.preventDefault()
-          handleAccountsExpandedToggle()
-        }}
-      >
-        <span className="max-w-[180px] truncate text-[12px] text-foreground">
-          {activeTarget?.label ??
-            translate('auto.components.status.bar.StatusBar.c676918adc', 'System default')}
-        </span>
-        {accountsExpanded ? (
-          <ChevronDown className="ml-auto size-3.5 text-muted-foreground/85" />
-        ) : (
-          <ChevronRight className="ml-auto size-3.5 text-muted-foreground/85" />
-        )}
-      </DropdownMenuItem>
-      {accountsExpanded ? (
-        <div className="px-1 pb-1">
-          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-            {translate('auto.components.status.bar.StatusBar.9332ba8684', 'Switch to')}
-          </div>
-          <div className="max-h-[220px] overflow-y-auto rounded-md border border-border/60 bg-accent/5 p-1 scrollbar-sleek">
-            {selectedGroup?.targets.length === 0 ? (
-              <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                {translate('auto.components.status.bar.StatusBar.c98ea88392', 'No other accounts')}
-              </div>
-            ) : null}
-            {selectedGroup?.targets.map((target) => {
-              const inactiveUsage = target.id
-                ? inactiveClaudeAccounts.find((a) => a.accountId === target.id)
-                : null
-
-              return (
-                <DropdownMenuItem
-                  key={`${selectedGroup.key}:${target.id ?? 'system'}`}
-                  disabled={isSwitching || target.active}
-                  onSelect={(event) => {
-                    event.preventDefault()
-                    if (!target.active) {
-                      void handleSelectAccount(target.id, target.runtimeTarget)
-                    }
-                  }}
-                >
-                  <div className="flex w-full flex-col gap-0.5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate">{target.label}</span>
-                      {target.active ? (
-                        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                          {translate('auto.components.status.bar.StatusBar.ff0fbe9311', 'Active')}
-                        </span>
-                      ) : null}
-                    </div>
-                    {inactiveUsage?.isFetching && !inactiveUsage.rateLimits ? (
-                      <InlineUsageSkeleton />
-                    ) : inactiveUsage?.rateLimits ? (
-                      <InlineUsageBars
-                        limits={inactiveUsage.rateLimits}
-                        isFetching={inactiveUsage.isFetching}
-                      />
-                    ) : null}
-                  </div>
-                </DropdownMenuItem>
-              )
-            })}
-          </div>
-          <div className="px-2 py-1.5 text-[10px] leading-4 text-muted-foreground">
-            {translate(
-              'auto.components.status.bar.StatusBar.8295903d17',
-              'Restart live Claude terminals before continuing old conversations after switching.'
+      {CLAUDE_MANAGED_ACCOUNTS_ENABLED ? (
+        <>
+          <DropdownMenuLabel>
+            {translate('auto.components.status.bar.StatusBar.d450654fa2', 'Claude Account')}
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              handleAccountsExpandedToggle()
+            }}
+          >
+            <span className="max-w-[180px] truncate text-[12px] text-foreground">
+              {activeTarget?.label ??
+                translate('auto.components.status.bar.StatusBar.c676918adc', 'System default')}
+            </span>
+            {accountsExpanded ? (
+              <ChevronDown className="ml-auto size-3.5 text-muted-foreground/85" />
+            ) : (
+              <ChevronRight className="ml-auto size-3.5 text-muted-foreground/85" />
             )}
-          </div>
-        </div>
-      ) : null}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-        onSelect={() => {
-          openSettingsTarget({
-            pane: 'accounts',
-            repoId: null,
-            sectionId: 'accounts-claude'
-          })
-          openSettingsPage()
-        }}
-      >
-        {translate('auto.components.status.bar.StatusBar.75ded02687', 'Manage Accounts…')}
-      </DropdownMenuItem>
+          </DropdownMenuItem>
+          {accountsExpanded ? (
+            <div className="px-1 pb-1">
+              <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                {translate('auto.components.status.bar.StatusBar.9332ba8684', 'Switch to')}
+              </div>
+              <div className="max-h-[220px] overflow-y-auto rounded-md border border-border/60 bg-accent/5 p-1 scrollbar-sleek">
+                {selectedGroup?.targets.length === 0 ? (
+                  <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                    {translate(
+                      'auto.components.status.bar.StatusBar.c98ea88392',
+                      'No other accounts'
+                    )}
+                  </div>
+                ) : null}
+                {selectedGroup?.targets.map((target) => {
+                  const inactiveUsage = target.id
+                    ? inactiveClaudeAccounts.find((a) => a.accountId === target.id)
+                    : null
+
+                  return (
+                    <DropdownMenuItem
+                      key={`${selectedGroup.key}:${target.id ?? 'system'}`}
+                      disabled={isSwitching || target.active}
+                      onSelect={(event) => {
+                        event.preventDefault()
+                        if (!target.active) {
+                          void handleSelectAccount(target.id, target.runtimeTarget)
+                        }
+                      }}
+                    >
+                      <div className="flex w-full flex-col gap-0.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate">{target.label}</span>
+                          {target.active ? (
+                            <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                              {translate(
+                                'auto.components.status.bar.StatusBar.ff0fbe9311',
+                                'Active'
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                        {inactiveUsage?.isFetching && !inactiveUsage.rateLimits ? (
+                          <InlineUsageSkeleton />
+                        ) : inactiveUsage?.rateLimits ? (
+                          <InlineUsageBars
+                            limits={inactiveUsage.rateLimits}
+                            isFetching={inactiveUsage.isFetching}
+                          />
+                        ) : null}
+                      </div>
+                    </DropdownMenuItem>
+                  )
+                })}
+              </div>
+              <div className="px-2 py-1.5 text-[10px] leading-4 text-muted-foreground">
+                {translate(
+                  'auto.components.status.bar.StatusBar.8295903d17',
+                  'Restart live Claude terminals before continuing old conversations after switching.'
+                )}
+              </div>
+            </div>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              openSettingsTarget({
+                pane: 'accounts',
+                repoId: null,
+                sectionId: 'accounts-claude'
+              })
+              openSettingsPage()
+            }}
+          >
+            {translate('auto.components.status.bar.StatusBar.75ded02687', 'Manage Accounts…')}
+          </DropdownMenuItem>
+        </>
+      ) : (
+        <>
+          <DropdownMenuLabel>
+            {translate(
+              'auto.components.status.bar.StatusBar.claudeAuthentication',
+              'Claude Authentication'
+            )}
+          </DropdownMenuLabel>
+          <DropdownMenuItem disabled>
+            {translate(
+              'auto.components.status.bar.StatusBar.systemClaudeCodeSignIn',
+              'System Claude Code sign-in'
+            )}
+          </DropdownMenuItem>
+        </>
+      )}
     </ProviderDetailsMenu>
   )
 }

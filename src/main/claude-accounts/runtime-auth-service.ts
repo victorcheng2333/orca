@@ -20,6 +20,7 @@ import { runWslProcess } from '../wsl/wsl-runner'
 import { hasLiveClaudePtys } from './live-pty-gate'
 import { isOauthTokenExpiring, refreshClaudeOauthCredentials } from './oauth-refresh'
 import { ClaudeRuntimePathResolver } from './runtime-paths'
+import { ClaudeManagedAuthStorage } from './claude-managed-auth-storage'
 import {
   deleteActiveClaudeKeychainCredentialsStrict,
   readActiveClaudeKeychainCredentials,
@@ -46,6 +47,10 @@ export type ClaudeRuntimeAuthPreparation = {
   stripAuthEnv: boolean
   managedRefreshDeferredByLivePty?: boolean
   provenance: string
+}
+
+export type ClaudeRuntimeAuthServiceOptions = {
+  managedAccountsEnabled?: boolean
 }
 
 type ClaudeSystemDefaultSnapshot = {
@@ -96,6 +101,9 @@ function shellQuote(value: string): string {
 
 export class ClaudeRuntimeAuthService {
   private readonly pathResolver = new ClaudeRuntimePathResolver()
+  private readonly managedAccountsEnabled: boolean
+  private readonly startupPromise: Promise<void>
+  private startupFailure: Error | null = null
   private mutationQueue: Promise<unknown> = Promise.resolve()
   private lastSyncedAccountId: string | null = null
   // Why: creds Orca last wrote to the shared file; a mismatch on managed→default transition means an external login overwrote it, so adopt it as the new default.
@@ -106,14 +114,21 @@ export class ClaudeRuntimeAuthService {
   private skipNextReadBackForAccountId: string | null = null
   private managedRefreshDeferredByLivePtyAccountId: string | null = null
 
-  constructor(private readonly store: Store) {
+  constructor(
+    private readonly store: Store,
+    options: ClaudeRuntimeAuthServiceOptions = { managedAccountsEnabled: true }
+  ) {
+    this.managedAccountsEnabled = options.managedAccountsEnabled !== false
     this.initializeLastSyncedState()
-    void this.safeSyncForCurrentSelection()
+    this.startupPromise = this.managedAccountsEnabled
+      ? this.safeSyncForCurrentSelection()
+      : this.beginManagedAccountDisableMigration()
   }
 
   async prepareForClaudeLaunch(
     target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRuntimeAuthPreparation> {
+    await this.awaitStartup()
     const effectiveTarget = target ?? this.getDefaultAccountSelectionTarget()
     await this.syncForCurrentSelection(effectiveTarget)
     return this.getPreparation(effectiveTarget)
@@ -122,18 +137,27 @@ export class ClaudeRuntimeAuthService {
   async prepareForRateLimitFetch(
     target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRuntimeAuthPreparation> {
+    await this.awaitStartup()
     const effectiveTarget = target ?? this.getDefaultAccountSelectionTarget()
     await this.syncForCurrentSelection(effectiveTarget)
     return this.getPreparation(effectiveTarget)
   }
 
   async syncForCurrentSelection(target?: ClaudeAccountSelectionTarget): Promise<void> {
+    if (!this.managedAccountsEnabled) {
+      await this.awaitStartup()
+      return
+    }
     await this.serializeMutation(() =>
       this.doSyncForCurrentSelection(target ?? this.getDefaultAccountSelectionTarget())
     )
   }
 
   async forceMaterializeCurrentSelectionForRollback(): Promise<void> {
+    if (!this.managedAccountsEnabled) {
+      await this.awaitStartup()
+      return
+    }
     await this.serializeMutation(async () => {
       const settings = this.store.getSettings()
       if (!settings.activeClaudeManagedAccountId) {
@@ -166,6 +190,75 @@ export class ClaudeRuntimeAuthService {
       await this.syncForCurrentSelection()
     } catch (error) {
       console.warn('[claude-runtime-auth] Failed to sync runtime auth state:', error)
+    }
+  }
+
+  private beginManagedAccountDisableMigration(): Promise<void> {
+    const settings = this.store.getSettings()
+    const selection = normalizeClaudeRuntimeSelection(settings)
+    const hostAccountId = getSelectedClaudeAccountIdForTarget(settings, { runtime: 'host' })
+    const hostAccount = this.getActiveAccount(settings.claudeManagedAccounts, hostAccountId)
+    const accounts = [...settings.claudeManagedAccounts]
+
+    // Why: clear every launch selector synchronously so no caller can observe a
+    // managed config directory while the one-time credential restoration runs.
+    this.store.updateSettings({
+      activeClaudeManagedAccountId: null,
+      activeClaudeManagedAccountIdsByRuntime: {
+        host: null,
+        wsl: Object.fromEntries(Object.keys(selection.wsl).map((key) => [key, null]))
+      }
+    })
+
+    return this.migrateAwayFromManagedAccounts(hostAccount, accounts).catch((error) => {
+      this.startupFailure =
+        error instanceof Error ? error : new Error('Claude credential migration failed')
+      console.error(
+        '[claude-runtime-auth] Failed to disable managed Claude accounts:',
+        this.startupFailure
+      )
+    })
+  }
+
+  private async migrateAwayFromManagedAccounts(
+    hostAccount: ClaudeManagedAccount | null,
+    accounts: ClaudeManagedAccount[]
+  ): Promise<void> {
+    if (hostAccount && hostAccount.managedAuthRuntime !== 'wsl') {
+      const managedCredentials = await this.readManagedCredentials(hostAccount)
+      const managedOauthAccount = await this.readManagedOauthAccount(hostAccount)
+      await (managedCredentials
+        ? this.restoreSystemDefaultSnapshot(managedCredentials, managedOauthAccount)
+        : this.restoreSystemDefaultSnapshotForMissingManagedCredentials(
+            hostAccount,
+            managedOauthAccount
+          ))
+    }
+
+    const storage = new ClaudeManagedAuthStorage()
+    for (const [index, account] of accounts.entries()) {
+      await storage.removeStrict(account.id, account.managedAuthPath)
+      this.store.updateSettings({
+        claudeManagedAccounts: accounts.slice(index + 1)
+      })
+    }
+    rmSync(this.getSystemDefaultSnapshotPath(), { force: true })
+    this.store.updateSettings({
+      claudeManagedAccounts: [],
+      activeClaudeManagedAccountId: null,
+      activeClaudeManagedAccountIdsByRuntime: { host: null, wsl: {} }
+    })
+    this.lastSyncedAccountId = null
+    this.clearLastWrittenRuntimeState()
+  }
+
+  private async awaitStartup(): Promise<void> {
+    await this.startupPromise
+    if (this.startupFailure) {
+      throw new Error(
+        'Orca could not restore the system Claude Code sign-in. Claude launch is blocked to protect stored credentials.',
+        { cause: this.startupFailure }
+      )
     }
   }
 

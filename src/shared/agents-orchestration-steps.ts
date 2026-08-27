@@ -33,8 +33,7 @@ export const AGENTS_STEPS: readonly AgentsStep[] = [
     id: 'usage',
     name: 'Usage',
     subtitle: 'Usage',
-    description:
-      'Watch your usage and rate limits across every connected account, so you know when to switch.',
+    description: 'Watch usage and rate limits reported through supported provider clients.',
     optional: true
   }
 ] as const

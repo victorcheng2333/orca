@@ -289,6 +289,7 @@ import { getDefaultWslDistro } from './wsl'
 import { collectWorktreeTrashSweepRoots, sweepStaleWorktreeTrash } from './worktree-trash'
 import { ClaudeAccountService } from './claude-accounts/service'
 import { ClaudeRuntimeAuthService } from './claude-accounts/runtime-auth-service'
+import { CLAUDE_MANAGED_ACCOUNTS_ENABLED } from '../shared/claude-managed-account-policy'
 import {
   attachClaudeLivePtyPersistence,
   onLiveClaudePtysDrained,
@@ -2609,8 +2610,12 @@ void app.whenReady().then(async () => {
   // Why: migrate historical shared-home sessions after startup; compatibility
   // launches re-arm the non-destructive pass for new rollouts (#4444, #8612, #12480).
   codexSessionMigration.scheduleInitialRun()
-  claudeRuntimeAuth = new ClaudeRuntimeAuthService(store)
-  claudeAccounts = new ClaudeAccountService(store, rateLimits, claudeRuntimeAuth)
+  claudeRuntimeAuth = new ClaudeRuntimeAuthService(store, {
+    managedAccountsEnabled: CLAUDE_MANAGED_ACCOUNTS_ENABLED
+  })
+  claudeAccounts = new ClaudeAccountService(store, rateLimits, claudeRuntimeAuth, {
+    managedAccountsEnabled: CLAUDE_MANAGED_ACCOUNTS_ENABLED
+  })
   rateLimits.setCodexHomePathResolver((target) =>
     codexRuntimeHome!.prepareForRateLimitFetch(target)
   )
@@ -2632,7 +2637,7 @@ void app.whenReady().then(async () => {
   rateLimits.setClaudeAuthPreparationResolver((target) =>
     claudeRuntimeAuth!.prepareForRateLimitFetch(target)
   )
-  // Why: live Claude sessions stream usage windows through their statusLine command; feeding them here avoids OAuth usage-endpoint polling (and its 429s).
+  // Why: usage is accepted only from the official Claude Code process.
   agentHookServer.setClaudeStatusLineListener((event) => {
     rateLimits?.ingestLiveClaudeRateLimits(event)
   })
@@ -2665,6 +2670,9 @@ void app.whenReady().then(async () => {
   })
   browserManager.setSettingsResolver(() => ({ keybindings: keybindings?.getOverrides() }))
   rateLimits.setInactiveClaudeAccountsResolver(() => {
+    if (!CLAUDE_MANAGED_ACCOUNTS_ENABLED) {
+      return []
+    }
     const settings = store!.getSettings()
     const activeIds = new Set(
       [

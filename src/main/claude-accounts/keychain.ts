@@ -78,6 +78,12 @@ export async function deleteManagedClaudeKeychainCredentials(accountId: string):
   await deleteKeychainPassword(ORCA_CLAUDE_SERVICE, accountId)
 }
 
+export async function deleteManagedClaudeKeychainCredentialsStrict(
+  accountId: string
+): Promise<void> {
+  await deleteKeychainPassword(ORCA_CLAUDE_SERVICE, accountId, { failOnAccessError: true })
+}
+
 function getKeychainUser(): string {
   return process.env.USER || process.env.USERNAME || 'user'
 }

@@ -1,18 +1,6 @@
-import { net, session } from 'electron'
-import { ensureElectronProxyFromEnvironment } from '../network/proxy-settings'
-
-// Why: the OAuth client id and token endpoint are the public Claude Code
-// values, verified against the installed `claude` binary (2.1.177) and the
-// claude-swap reference tool. Orca owns the refresh so a single-use refresh
-// token is rotated and persisted atomically, instead of being scraped back
-// after the CLI rotates it (the lossy path that strands stale tokens).
-const OAUTH_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
-const OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
-
 // Refresh slightly ahead of expiry so a token doesn't expire mid-launch. The
 // CLI uses the same 5-minute skew for its own refresh decision.
 const OAUTH_EXPIRY_BUFFER_MS = 5 * 60 * 1000
-const REFRESH_TIMEOUT_MS = 10_000
 
 type ClaudeOauthBlob = {
   accessToken?: unknown
@@ -113,58 +101,10 @@ export function applyRefreshedToken(
   return JSON.stringify(parsed)
 }
 
-/**
- * Refresh the OAuth token for a stored credentials blob.
- *
- * Returns the updated credentials JSON (with the rotated refresh token and new
- * access token) on success, or null on any failure. Never throws — callers
- * treat null as "keep the existing credentials", so a transient network error
- * is never worse than today's behavior.
- */
+/** OAuth refresh is owned exclusively by the official Claude Code client. */
 export async function refreshClaudeOauthCredentials(
-  credentialsJson: string,
-  now: number = Date.now()
+  _credentialsJson: string,
+  _now: number = Date.now()
 ): Promise<string | null> {
-  const refreshToken = readRefreshToken(credentialsJson)
-  if (!refreshToken) {
-    return null
-  }
-
-  await ensureElectronProxyFromEnvironment({
-    proxySession: session.defaultSession,
-    probeUrl: OAUTH_TOKEN_URL
-  }).catch(() => {})
-
-  try {
-    // Why: the `claude` CLI posts grant_type=refresh_token as
-    // application/x-www-form-urlencoded with the public client id. net.fetch
-    // routes through Chromium's stack so the env proxy bridge above applies.
-    const res = await net.fetch(OAUTH_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: OAUTH_CLIENT_ID
-      }).toString(),
-      signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS)
-    })
-    if (!res.ok) {
-      // Why: surface the status (never the token) so a throttle (429) or a
-      // dead refresh token (400/401 invalid_grant) is diagnosable in the
-      // field, instead of a silent null that looks identical to success.
-      // Callers keep the existing credentials on null — a transient 429 just
-      // means the still-valid token is reused until the next attempt.
-      console.warn(`[claude-oauth-refresh] token endpoint returned ${res.status}`)
-      return null
-    }
-    const data = (await res.json()) as TokenEndpointResponse
-    return applyRefreshedToken(credentialsJson, data, now)
-  } catch (error) {
-    console.warn(
-      '[claude-oauth-refresh] token refresh request failed:',
-      error instanceof Error ? error.message : error
-    )
-    return null
-  }
+  return null
 }

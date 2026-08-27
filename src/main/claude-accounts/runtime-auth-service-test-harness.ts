@@ -124,6 +124,12 @@ export function createKeychainMock() {
     readManagedClaudeKeychainCredentials: vi.fn(
       async (accountId: string) => testState.managedKeychainCredentials.get(accountId) ?? null
     ),
+    deleteManagedClaudeKeychainCredentials: vi.fn(async (accountId: string) => {
+      testState.managedKeychainCredentials.delete(accountId)
+    }),
+    deleteManagedClaudeKeychainCredentialsStrict: vi.fn(async (accountId: string) => {
+      testState.managedKeychainCredentials.delete(accountId)
+    }),
     writeManagedClaudeKeychainCredentials: vi.fn(async (accountId: string, contents: string) => {
       testState.managedKeychainCredentials.set(accountId, contents)
     })

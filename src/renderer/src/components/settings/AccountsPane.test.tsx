@@ -90,6 +90,15 @@ describe('AccountsPane', () => {
     expect(markup).not.toContain('forThis device')
   })
 
+  it('shows only the system Claude Code authentication path', () => {
+    const markup = renderPane(getDefaultSettings('/tmp'))
+
+    expect(markup).toContain('Orca uses the system Claude Code sign-in')
+    expect(markup).toContain('Run Claude Code in a terminal and use its /login command')
+    expect(markup).not.toContain('Claude Accounts')
+    expect(markup.split('Add Account').length - 1).toBe(1)
+  })
+
   it('localizes the runtime label before interpolating account copy', async () => {
     await i18n.changeLanguage('es')
 
@@ -116,10 +125,10 @@ describe('AccountsPane', () => {
     expect(markup).toContain(
       'Showing accounts managed by the remote server. Add or re-authenticate accounts on that server.'
     )
-    // Both the Claude and Codex sections must say local accounts are intact and
-    // link the default-runtime control, so the scoped list never reads as loss.
-    expect(markup.split('Accounts managed on this desktop are unchanged').length - 1).toBe(2)
-    expect(markup.split('Open Remote Servers').length - 1).toBe(2)
+    // Only Codex manages accounts in this build; Claude uses the remote host's
+    // system Claude Code sign-in.
+    expect(markup.split('Accounts managed on this desktop are unchanged').length - 1).toBe(1)
+    expect(markup.split('Open Remote Servers').length - 1).toBe(1)
     // Before the saved-server list loads there is no name to interpolate, so the
     // scope label must stay bare instead of stuttering the prose fallback.
     expect(markup).toContain('Account scope: Remote server<')

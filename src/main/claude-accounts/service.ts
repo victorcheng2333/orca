@@ -21,6 +21,7 @@ import {
 } from './claude-managed-auth-storage'
 import type { ClaudeRuntimeAuthService } from './runtime-auth-service'
 import type { ClaudeAccountSelectionTarget } from './runtime-selection'
+import { CLAUDE_MANAGED_ACCOUNTS_DISABLED_MESSAGE } from '../../shared/claude-managed-account-policy'
 
 export type ClaudeAccountAddTarget = {
   runtime?: 'host' | 'wsl'
@@ -29,6 +30,10 @@ export type ClaudeAccountAddTarget = {
 
 export type ClaudeAccountImportOptions = ClaudeAccountAddTarget & {
   previousLegacyCredentialsSha256?: string | null
+}
+
+export type ClaudeAccountServiceOptions = {
+  managedAccountsEnabled?: boolean
 }
 
 export class ClaudeAccountService {
@@ -41,7 +46,8 @@ export class ClaudeAccountService {
   constructor(
     store: Store,
     rateLimits: RateLimitService,
-    private readonly runtimeAuth: ClaudeRuntimeAuthService
+    private readonly runtimeAuth: ClaudeRuntimeAuthService,
+    private readonly options: ClaudeAccountServiceOptions = { managedAccountsEnabled: true }
   ) {
     this.selection = new ClaudeAccountSelection(store, rateLimits, runtimeAuth, (accountId, path) =>
       this.safeRemoveManagedAuth(accountId, path)
@@ -72,10 +78,14 @@ export class ClaudeAccountService {
   }
 
   listAccounts(): ClaudeRateLimitAccountsState {
+    if (!this.managedAccountsEnabled) {
+      return this.disabledSnapshot()
+    }
     return this.selection.list()
   }
 
   async addAccount(target?: ClaudeAccountAddTarget): Promise<ClaudeRateLimitAccountsState> {
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.registration.add(target))
   }
 
@@ -83,18 +93,25 @@ export class ClaudeAccountService {
     configDir: string,
     options?: ClaudeAccountImportOptions
   ): Promise<ClaudeRateLimitAccountsState> {
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.registration.addFromConfigDir(configDir, options))
   }
 
   async reauthenticateAccount(accountId: string): Promise<ClaudeRateLimitAccountsState> {
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.registration.reauthenticate(accountId))
   }
 
   async removeAccount(accountId: string): Promise<ClaudeRateLimitAccountsState> {
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.selection.remove(accountId))
   }
 
   async selectAccount(accountId: string | null): Promise<ClaudeRateLimitAccountsState> {
+    if (!this.managedAccountsEnabled && accountId === null) {
+      return this.disabledSnapshot()
+    }
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.selection.select(accountId))
   }
 
@@ -102,10 +119,17 @@ export class ClaudeAccountService {
     accountId: string | null,
     target?: ClaudeAccountSelectionTarget
   ): Promise<ClaudeRateLimitAccountsState> {
+    if (!this.managedAccountsEnabled && accountId === null) {
+      return this.disabledSnapshot()
+    }
+    this.assertManagedAccountsEnabled()
     return this.serializeMutation(() => this.selection.select(accountId, target))
   }
 
   cancelPendingLogin(): boolean {
+    if (!this.managedAccountsEnabled) {
+      return false
+    }
     return this.cancelPendingClaudeLogin?.() ?? false
   }
 
@@ -117,6 +141,24 @@ export class ClaudeAccountService {
     const next = this.mutationQueue.then(operation, operation)
     this.mutationQueue = next.catch(() => {})
     return next
+  }
+
+  private get managedAccountsEnabled(): boolean {
+    return this.options.managedAccountsEnabled !== false
+  }
+
+  private assertManagedAccountsEnabled(): void {
+    if (!this.managedAccountsEnabled) {
+      throw new Error(CLAUDE_MANAGED_ACCOUNTS_DISABLED_MESSAGE)
+    }
+  }
+
+  private disabledSnapshot(): ClaudeRateLimitAccountsState {
+    return {
+      accounts: [],
+      activeAccountId: null,
+      activeAccountIdsByRuntime: { host: null, wsl: {} }
+    }
   }
 
   private runClaudeLoginAndCapture(

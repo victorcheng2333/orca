@@ -11,6 +11,7 @@ import type {
   ClaudeRateLimitAccountsState,
   CodexRateLimitAccountsState
 } from '../../../../../shared/managed-account-types'
+import { CLAUDE_MANAGED_ACCOUNTS_ENABLED } from '../../../../../shared/claude-managed-account-policy'
 import { getFeatureWallUsageProviderConnection } from '../feature-wall-usage-tracking'
 import { translate } from '@/i18n/i18n'
 
@@ -114,16 +115,18 @@ export function UsageAccountsCard(props: {
   useEffect(() => {
     let stale = false
     void fetchRateLimits()
-    void (async () => {
-      try {
-        const next = await window.api.claudeAccounts.list()
-        if (!stale) {
-          setClaudeAccounts(next)
+    if (CLAUDE_MANAGED_ACCOUNTS_ENABLED) {
+      void (async () => {
+        try {
+          const next = await window.api.claudeAccounts.list()
+          if (!stale) {
+            setClaudeAccounts(next)
+          }
+        } catch {
+          // Silent — empty list is the right fallback for the inline pitch.
         }
-      } catch {
-        // Silent — empty list is the right fallback for the inline pitch.
-      }
-    })()
+      })()
+    }
     void (async () => {
       try {
         const next = await window.api.codexAccounts.list()
@@ -232,18 +235,20 @@ export function UsageAccountsCard(props: {
 
   return (
     <div className="flex flex-col gap-2.5">
-      <ProviderRow
-        icon={<ClaudeIcon size={16} />}
-        name="Claude"
-        description={translate(
-          'auto.components.feature.wall.agents.orchestration.UsageAccountsCard.d90d2e1f6d',
-          'Track session and weekly usage.'
-        )}
-        connected={claudeConnection.connected}
-        connectionLabel={claudeConnection.label}
-        isAdding={claudeAction === 'adding'}
-        onSignIn={() => void handleClaudeSignIn()}
-      />
+      {CLAUDE_MANAGED_ACCOUNTS_ENABLED ? (
+        <ProviderRow
+          icon={<ClaudeIcon size={16} />}
+          name="Claude"
+          description={translate(
+            'auto.components.feature.wall.agents.orchestration.UsageAccountsCard.d90d2e1f6d',
+            'Track session and weekly usage.'
+          )}
+          connected={claudeConnection.connected}
+          connectionLabel={claudeConnection.label}
+          isAdding={claudeAction === 'adding'}
+          onSignIn={() => void handleClaudeSignIn()}
+        />
+      ) : null}
       <ProviderRow
         icon={<OpenAIIcon size={16} />}
         name="Codex"

@@ -54,6 +54,10 @@ vi.mock('../../shared/node-cli-command-resolution', async (importOriginal) => ({
 vi.mock('../../shared/windows-console-input', () => ({
   stdioForWindowsInteractiveChild: stdioForWindowsInteractiveChildMock
 }))
+vi.mock('../../shared/claude-managed-account-policy', () => ({
+  CLAUDE_MANAGED_ACCOUNTS_DISABLED_MESSAGE: 'Managed Claude accounts are disabled.',
+  CLAUDE_MANAGED_ACCOUNTS_ENABLED: true
+}))
 
 import { ACCOUNT_HANDLERS } from './account'
 import type { HandlerContext } from '../dispatch'
