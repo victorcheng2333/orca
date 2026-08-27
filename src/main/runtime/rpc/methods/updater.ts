@@ -1,11 +1,11 @@
 import { defineMethod, type RpcMethod } from '../core'
 import { z } from 'zod'
-import {
-  checkRemoteServerUpdater,
-  downloadRemoteServerUpdater,
-  getRemoteServerUpdaterSnapshot,
-  installRemoteServerUpdater
-} from '../../remote-server-updater'
+import { OFFICIAL_UPDATES_DISABLED_MESSAGE } from '../../../../shared/official-update-policy'
+import { getRemoteServerUpdaterSnapshot } from '../../remote-server-updater'
+
+function rejectOfficialUpdate(): never {
+  throw new Error(OFFICIAL_UPDATES_DISABLED_MESSAGE)
+}
 
 export const UPDATER_METHODS: RpcMethod[] = [
   defineMethod({
@@ -19,16 +19,16 @@ export const UPDATER_METHODS: RpcMethod[] = [
       includePrerelease: z.boolean().optional(),
       includePerfPrerelease: z.boolean().optional()
     }),
-    handler: (params, { runtime }) => checkRemoteServerUpdater(runtime.getRuntimeId(), params)
+    handler: rejectOfficialUpdate
   }),
   defineMethod({
     name: 'updater.download',
     params: null,
-    handler: (_params, { runtime }) => downloadRemoteServerUpdater(runtime.getRuntimeId())
+    handler: rejectOfficialUpdate
   }),
   defineMethod({
     name: 'updater.install',
     params: null,
-    handler: (_params, { runtime }) => installRemoteServerUpdater(runtime.getRuntimeId())
+    handler: rejectOfficialUpdate
   })
 ]

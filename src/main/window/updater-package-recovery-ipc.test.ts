@@ -72,9 +72,16 @@ const RECOVERY_CHANNELS = [
   'updater:getLinuxPackageInstallInstructions',
   'updater:showLinuxPackage'
 ] as const
+const MUTATION_CHANNELS = [
+  'updater:check',
+  'updater:download',
+  'updater:quitAndInstall',
+  'updater:listBuilds'
+] as const
 
 const TRUSTED_ID = 7
 const UNAUTHORIZED = 'Unauthorized updater package recovery sender'
+const UPDATES_DISABLED = 'Official Orca updates are disabled in this build.'
 
 type InvokeHandler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
 
@@ -144,6 +151,14 @@ describe('updater linux package recovery IPC handlers', () => {
     }
   })
 
+  it('rejects every manual update mutation and reports no available update', () => {
+    const event = senderEvent(webContents({}))
+    for (const channel of MUTATION_CHANNELS) {
+      expect(() => getHandler(channel)(event)).toThrow(UPDATES_DISABLED)
+    }
+    expect(getHandler('updater:getStatus')(event)).toEqual({ state: 'not-available' })
+  })
+
   it('routes both channels through the trusted-renderer guard', () => {
     isTrustedUIRendererMock.mockReturnValue(false)
 
@@ -152,15 +167,14 @@ describe('updater linux package recovery IPC handlers', () => {
     expect(isTrustedUIRendererMock).toHaveBeenCalledTimes(2)
   })
 
-  it('serves the current main UI renderer', async () => {
+  it('rejects package recovery for the current main UI renderer', () => {
     const event = senderEvent(webContents({}))
 
-    await expect(getHandler(RECOVERY_CHANNELS[0])(event)).resolves.toEqual({
-      ok: true,
-      command: "sudo apt install -- '<pkg>'",
-      packageFileName: 'p'
-    })
-    await expect(getHandler(RECOVERY_CHANNELS[1])(event)).resolves.toBeUndefined()
+    for (const channel of RECOVERY_CHANNELS) {
+      expect(() => getHandler(channel)(event)).toThrow(UPDATES_DISABLED)
+    }
+    expect(getLinuxPackageInstallInstructionsMock).not.toHaveBeenCalled()
+    expect(showLinuxPackageMock).not.toHaveBeenCalled()
   })
 
   // Each row is a distinct branch of the real isTrustedUIRenderer, not a relabelled mock return.
@@ -182,12 +196,12 @@ describe('updater linux package recovery IPC handlers', () => {
 
   it('rechecks sender trust on every invocation', () => {
     const event = senderEvent(webContents({}))
-    void getHandler(RECOVERY_CHANNELS[0])(event)
+    expect(() => getHandler(RECOVERY_CHANNELS[0])(event)).toThrow(UPDATES_DISABLED)
 
     // The main window was replaced between calls; the previously served sender is now stale.
     actualUi.setTrustedUIRendererWebContentsId(TRUSTED_ID + 1)
 
     expect(() => getHandler(RECOVERY_CHANNELS[0])(event)).toThrow(UNAUTHORIZED)
-    expect(getLinuxPackageInstallInstructionsMock).toHaveBeenCalledTimes(1)
+    expect(getLinuxPackageInstallInstructionsMock).not.toHaveBeenCalled()
   })
 })

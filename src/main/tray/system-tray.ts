@@ -6,6 +6,7 @@ import { createAppIconImage } from '../app-icon'
 import { translateMain } from '../i18n/main-i18n'
 import { composeTrayAttentionIcon, tintTrayTemplateForAttention } from './tray-attention-icon'
 import { stampTrayDevBadge } from './tray-dev-badge'
+import { OFFICIAL_UPDATES_ENABLED } from '../../shared/official-update-policy'
 
 export type SystemTrayOptions = {
   /** App icon id from settings; the tray reuses the app icon image. */
@@ -272,10 +273,14 @@ export function createSystemTray(opts: SystemTrayOptions): Tray | null {
             label: translateMain('menu.settings', 'Settings'),
             click: safeMenuAction(() => opts.onOpenSettings())
           },
-          {
-            label: translateMain('menu.checkForUpdates', 'Check for Updates...'),
-            click: safeMenuAction(() => opts.onCheckForUpdates())
-          },
+          ...(OFFICIAL_UPDATES_ENABLED
+            ? [
+                {
+                  label: translateMain('menu.checkForUpdates', 'Check for Updates...'),
+                  click: safeMenuAction(() => opts.onCheckForUpdates())
+                }
+              ]
+            : []),
           { type: 'separator' }
         ] as Electron.MenuItemConstructorOptions[])
       : []),

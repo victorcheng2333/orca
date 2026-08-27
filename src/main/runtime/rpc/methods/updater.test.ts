@@ -38,24 +38,24 @@ describe('runtime updater RPC methods', () => {
     configureRemoteServerUpdater({ getSnapshot, check, download, install })
   })
 
-  it('exposes status and each update transition', async () => {
+  it('exposes status but rejects every update transition', async () => {
     const context = { runtime } as never
     expect(await handler(UPDATER_METHODS, 'updater.getStatus')(undefined, context)).toBe(snapshot)
-    expect(
-      await handler(UPDATER_METHODS, 'updater.check')(
+    expect(() =>
+      handler(UPDATER_METHODS, 'updater.check')(
         { includePrerelease: false, includePerfPrerelease: true },
         context
       )
-    ).toBe(snapshot)
-    expect(await handler(UPDATER_METHODS, 'updater.download')(undefined, context)).toBe(snapshot)
-    expect(await handler(UPDATER_METHODS, 'updater.install')(undefined, context)).toMatchObject({
-      accepted: true,
-      runtimeId: 'runtime-rpc'
-    })
-    expect(check).toHaveBeenCalledWith('runtime-rpc', {
-      includePrerelease: false,
-      includePerfPrerelease: true
-    })
+    ).toThrow('Official Orca updates are disabled in this build.')
+    expect(() => handler(UPDATER_METHODS, 'updater.download')(undefined, context)).toThrow(
+      'Official Orca updates are disabled in this build.'
+    )
+    expect(() => handler(UPDATER_METHODS, 'updater.install')(undefined, context)).toThrow(
+      'Official Orca updates are disabled in this build.'
+    )
+    expect(check).not.toHaveBeenCalled()
+    expect(download).not.toHaveBeenCalled()
+    expect(install).not.toHaveBeenCalled()
   })
 
   it('enriches status.get without changing the runtime status source', async () => {

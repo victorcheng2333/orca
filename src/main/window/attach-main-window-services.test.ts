@@ -119,7 +119,10 @@ vi.mock('../macos-tcc-prompt-notice', () => ({
   releasePendingTccPromptNotice: releasePendingTccPromptNoticeMock
 }))
 
-import { attachMainWindowServices } from './attach-main-window-services'
+import {
+  attachMainWindowServices,
+  ensureAutoUpdaterConfigured
+} from './attach-main-window-services'
 
 type MockFn = ReturnType<typeof vi.fn>
 
@@ -306,7 +309,7 @@ describe('attachMainWindowServices', () => {
     expect(hydrateLocalPtyRegistryAtBootMock).toHaveBeenLastCalledWith(store)
   })
 
-  it('passes injected update quit cleanup to the auto-updater', async () => {
+  it('never initializes the auto-updater', async () => {
     const onBeforeUpdateQuit = vi.fn()
     const store = createStore()
     const mainWindow = createMainWindow()
@@ -320,30 +323,19 @@ describe('attachMainWindowServices', () => {
       { onBeforeUpdateQuit, updateInstallMode: 'supervised-headless-serve' }
     )
 
-    // Deferred to first paint — must not be configured at attach time.
     expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
     await fireReadyToShow(mainWindow)
-    expect(setupAutoUpdaterMock).toHaveBeenCalledTimes(1)
-    expect(setupAutoUpdaterMock).toHaveBeenCalledWith(
-      mainWindow,
-      expect.objectContaining({ installMode: 'supervised-headless-serve' })
-    )
-    await setupAutoUpdaterMock.mock.calls[0][1].onBeforeQuit()
-
-    expect(onBeforeUpdateQuit).toHaveBeenCalledTimes(1)
-    expect(store.flushPendingAsync).toHaveBeenCalledTimes(1)
+    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
+    expect(mainWindow.once).not.toHaveBeenCalledWith('ready-to-show', expect.any(Function))
+    expect(onBeforeUpdateQuit).not.toHaveBeenCalled()
+    expect(store.flushPendingAsync).not.toHaveBeenCalled()
   })
 
-  it('flushes the store before update quit when no cleanup is injected', async () => {
-    const store = createStore()
-    const mainWindow = createMainWindow()
-
-    attachMainWindowServices(mainWindow as never, store, createRuntime() as never)
-
-    await fireReadyToShow(mainWindow)
-    await setupAutoUpdaterMock.mock.calls[0][1].onBeforeQuit()
-
-    expect(store.flushPendingAsync).toHaveBeenCalledTimes(1)
+  it('rejects attempts to initialize the updater manually', () => {
+    expect(() => ensureAutoUpdaterConfigured()).toThrow(
+      'Official Orca updates are disabled in this build.'
+    )
+    expect(setupAutoUpdaterMock).not.toHaveBeenCalled()
   })
 
   it('replaces the TCC handlers when the main window is reattached', () => {

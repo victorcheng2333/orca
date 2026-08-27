@@ -24,6 +24,7 @@ import { SettingsSubsectionHeader, SettingsSwitchRow } from './SettingsFormContr
 import { translate } from '@/i18n/i18n'
 import { DefaultWindowsProjectRuntimeSetting } from './DefaultWindowsProjectRuntimeSetting'
 import { getActiveRuntimeTarget } from '@/runtime/runtime-rpc-client'
+import { OFFICIAL_UPDATES_ENABLED } from '../../../../shared/official-update-policy'
 
 export {
   createAutoSaveDelayDraftState,
@@ -215,6 +216,7 @@ export function GeneralPane({
         wslCapabilitiesLoading={wslCapabilitiesLoading}
       />
     ) : null,
+    OFFICIAL_UPDATES_ENABLED &&
     matchesSettingsSearch(searchQuery, getGeneralUpdateSearchEntries()) ? (
       <GeneralUpdateSettingsSection key="updates" />
     ) : null
